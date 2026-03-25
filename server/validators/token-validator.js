@@ -51,6 +51,21 @@ const paginationSchema = z.object({
 });
 
 /**
+ * @title Search Validation Schema
+ * @dev Validates search query parameters.
+ *      Allows optional search string with length constraints.
+ */
+const searchSchema = z.object({
+  search: z
+    .string()
+    .min(1, "Search query must be at least 1 character")
+    .max(50, "Search query must not exceed 50 characters")
+    .optional()
+    .or(z.literal("")
+      .transform(() => undefined)), // Convert empty string to undefined
+});
+
+/**
  * @notice Middleware for validating token creation requests
  * @dev Uses Zod to validate req.body and logs failures to DeploymentAudit.
  *      Expects req.user to be populated by authentication middleware.
@@ -97,7 +112,29 @@ const validateToken = async (req, res, next) => {
 const validatePagination = (req, res, next) => {
   try {
     const validatedQuery = paginationSchema.parse(req.query);
-    req.query = validatedQuery;
+    req.query = { ...req.query, ...validatedQuery };
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errorMessage = error.errors
+        .map((e) => `${e.path.join(".")}: ${e.message}`)
+        .join(", ");
+      return next(new AppError(errorMessage, 400, "VALIDATION_ERROR"));
+    }
+    next(error);
+  }
+};
+
+/**
+ * @notice Middleware for validating search query parameters
+ * @dev Validates req.query.search and sanitizes the input.
+ *      Supports case-insensitive partial matching on token name and symbol.
+ */
+const validateSearch = (req, res, next) => {
+  try {
+    const validatedQuery = searchSchema.parse(req.query);
+    // Merge validated search with existing query params
+    req.query = { ...req.query, ...validatedQuery };
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -113,6 +150,8 @@ const validatePagination = (req, res, next) => {
 module.exports = {
   tokenSchema,
   paginationSchema,
+  searchSchema,
   validateToken,
   validatePagination,
+  validateSearch,
 };

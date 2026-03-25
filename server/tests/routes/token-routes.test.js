@@ -258,4 +258,177 @@ describe("Token Routes", () => {
       expect(response.body.metadata.totalCount).toBe(0);
     });
   });
+
+  describe("GET /api/tokens/:owner with search", () => {
+    beforeEach(async () => {
+      // Seed tokens with different names and symbols
+      await new Token({
+        name: "SoroMint Token",
+        symbol: "SORO",
+        decimals: 7,
+        contractId: TEST_CONTRACT_ID.replace("A", "1"),
+        ownerPublicKey: TEST_PUBLIC_KEY,
+        createdAt: new Date(Date.now() - 3000),
+      }).save();
+
+      await new Token({
+        name: "SoroGold Asset",
+        symbol: "SGOLD",
+        decimals: 7,
+        contractId: TEST_CONTRACT_ID.replace("A", "2"),
+        ownerPublicKey: TEST_PUBLIC_KEY,
+        createdAt: new Date(Date.now() - 2000),
+      }).save();
+
+      await new Token({
+        name: "Bitcoin Wrapped",
+        symbol: "BTC",
+        decimals: 8,
+        contractId: TEST_CONTRACT_ID.replace("A", "3"),
+        ownerPublicKey: TEST_PUBLIC_KEY,
+        createdAt: new Date(Date.now() - 1000),
+      }).save();
+
+      await new Token({
+        name: "Ethereum Token",
+        symbol: "ETH",
+        decimals: 18,
+        contractId: TEST_CONTRACT_ID.replace("A", "4"),
+        ownerPublicKey: TEST_PUBLIC_KEY,
+        createdAt: new Date(),
+      }).save();
+    });
+
+    it("should search tokens by name (case-insensitive)", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=soro`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.length).toBe(2);
+      expect(response.body.data.map((t) => t.symbol).sort()).toEqual(["SGOLD", "SORO"]);
+      expect(response.body.metadata.search).toBe("soro");
+      expect(response.body.metadata.totalCount).toBe(2);
+    });
+
+    it("should search tokens by symbol (case-insensitive)", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=BTC`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0].symbol).toBe("BTC");
+      expect(response.body.metadata.search).toBe("BTC");
+    });
+
+    it("should perform case-insensitive search", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=SORO`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(2);
+      expect(response.body.data.map((t) => t.symbol).sort()).toEqual(["SGOLD", "SORO"]);
+    });
+
+    it("should support partial matching", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=token`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(2);
+      expect(response.body.data.map((t) => t.symbol).sort()).toEqual(["ETH", "SORO"]);
+    });
+
+    it("should return empty array for non-matching search", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=xyz123`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual([]);
+      expect(response.body.metadata.totalCount).toBe(0);
+      expect(response.body.metadata.search).toBe("xyz123");
+    });
+
+    it("should return all tokens when search is empty", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(4);
+      expect(response.body.metadata.totalCount).toBe(4);
+      expect(response.body.metadata.search).toBeUndefined();
+    });
+
+    it("should return all tokens when search parameter is not provided", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(4);
+      expect(response.body.metadata.totalCount).toBe(4);
+      expect(response.body.metadata.search).toBeNull();
+    });
+
+    it("should combine search with pagination", async () => {
+      // Search for "soro" with limit 1
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=soro&limit=1&page=1`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.metadata.totalCount).toBe(2);
+      expect(response.body.metadata.totalPages).toBe(2);
+      expect(response.body.metadata.search).toBe("soro");
+    });
+
+    it("should reject search query that is too long", async () => {
+      const longSearch = "a".repeat(51);
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=${longSearch}`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe("VALIDATION_ERROR");
+      expect(response.body.error).toContain("Search query must not exceed 50 characters");
+    });
+
+    it("should reject invalid pagination with search", async () => {
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=soro&page=0`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe("VALIDATION_ERROR");
+      expect(response.body.error).toContain("Page");
+    });
+
+    it("should only search within the specified owner's tokens", async () => {
+      // Create a token for a different owner
+      await new Token({
+        name: "SoroOther Token",
+        symbol: "SORO",
+        decimals: 7,
+        contractId: TEST_CONTRACT_ID.replace("A", "5"),
+        ownerPublicKey: "GABCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        createdAt: new Date(),
+      }).save();
+
+      const response = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?search=soro`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(response.status).toBe(200);
+      // Should only find the 2 tokens belonging to TEST_PUBLIC_KEY
+      expect(response.body.data.length).toBe(2);
+      expect(response.body.metadata.totalCount).toBe(2);
+    });
+  });
 });

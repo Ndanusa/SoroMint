@@ -7,6 +7,7 @@ const { authenticate } = require("../middleware/auth");
 const {
   validateToken,
   validatePagination,
+  validateSearch,
 } = require("../validators/token-validator");
 
 const router = express.Router();
@@ -17,6 +18,7 @@ const router = express.Router();
  * @param {string} owner.path - Owner's Stellar public key
  * @param {number} page.query - Page number (default: 1)
  * @param {number} limit.query - Items per page (default: 20)
+ * @param {string} search.query - Search query for token name or symbol (case-insensitive)
  * @returns {Object} 200 - Paginated tokens with metadata
  * @returns {Error} 400 - Invalid parameters
  * @returns {Error} default - Unexpected error
@@ -26,25 +28,45 @@ router.get(
   "/tokens/:owner",
   authenticate,
   validatePagination,
+  validateSearch,
   asyncHandler(async (req, res) => {
     const { owner } = req.params;
-    const { page, limit } = req.query;
+    const { page, limit, search } = req.query;
 
     logger.info("Fetching tokens for owner", {
       correlationId: req.correlationId,
       ownerPublicKey: owner,
       page,
       limit,
+      search: search || null,
     });
 
     const skip = (page - 1) * limit;
 
+    // Build query filter
+    const queryFilter = { ownerPublicKey: owner };
+
+    // Add search filter if provided
+    if (search) {
+      const searchRegex = new RegExp(search, "i"); // Case-insensitive regex
+      queryFilter.$or = [
+        { name: { $regex: searchRegex } },
+        { symbol: { $regex: searchRegex } },
+      ];
+
+      logger.info("Applying search filter", {
+        correlationId: req.correlationId,
+        search,
+        ownerPublicKey: owner,
+      });
+    }
+
     const [tokens, totalCount] = await Promise.all([
-      Token.find({ ownerPublicKey: owner })
+      Token.find(queryFilter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
-      Token.countDocuments({ ownerPublicKey: owner }),
+      Token.countDocuments(queryFilter),
     ]);
 
     const totalPages = Math.ceil(totalCount / limit);
@@ -57,6 +79,7 @@ router.get(
         page,
         totalPages,
         limit,
+        search: search || null,
       },
     });
   }),
