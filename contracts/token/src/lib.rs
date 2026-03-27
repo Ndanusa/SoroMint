@@ -138,6 +138,22 @@ impl SoroMintToken {
         e.storage().instance().get(&DataKey::FeeConfig)
     }
 
+    pub fn set_name(e: Env, name: String) {
+        let admin: Address = e.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        let old_name: String = e.storage().instance().get(&DataKey::Name).unwrap_or_else(|| String::from_str(&e, "SoroMint"));
+        e.storage().instance().set(&DataKey::Name, &name);
+        events::emit_name_updated(&e, &admin, &old_name, &name);
+    }
+
+    pub fn set_symbol(e: Env, symbol: String) {
+        let admin: Address = e.storage().instance().get(&DataKey::Admin).expect("not initialized");
+        admin.require_auth();
+        let old_symbol: String = e.storage().instance().get(&DataKey::Symbol).unwrap_or_else(|| String::from_str(&e, "SMT"));
+        e.storage().instance().set(&DataKey::Symbol, &symbol);
+        events::emit_symbol_updated(&e, &admin, &old_symbol, &symbol);
+    }
+
     pub fn version(e: Env) -> String { String::from_str(&e, "1.0.0") }
     pub fn status(e: Env) -> String { String::from_str(&e, "alive") }
     pub fn supply(e: Env) -> i128 { e.storage().instance().get(&DataKey::Supply).unwrap_or(0) }

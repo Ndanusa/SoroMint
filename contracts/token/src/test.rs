@@ -27,7 +27,6 @@ fn setup() -> (Env, Address, Address, SoroMintTokenClient<'static>) {
 fn find_event_by_action(e: &Env, action: &str) -> Option<Val> {
     let action_sym = Symbol::new(e, action);
     for event in e.events().all().iter().rev() {
-        // topics are event.1
         for t in event.1.iter() {
             if let Some(s) = Symbol::try_from_val(e, &t).ok() {
                 if s == action_sym {
@@ -50,7 +49,7 @@ fn test_initialize_and_mint() {
 fn test_initialize_emits_event() {
     let (e, admin, _, _) = setup();
     let data = find_event_by_action(&e, "init").expect("init event not found");
-    let (addr, dec, name, sym): (Address, u32, String, String) = data.into_val(&e);
+    let (addr, dec, _name, _sym): (Address, u32, String, String) = data.into_val(&e);
     assert_eq!(addr, admin);
     assert_eq!(dec, 7);
 }
@@ -92,7 +91,7 @@ fn test_transfer_with_fee() {
 
 #[test]
 fn test_burn() {
-    let (e, _, user, client) = setup();
+    let (_e, _, user, client) = setup();
     client.mint(&user, &1000);
     client.burn(&user, &400);
     assert_eq!(client.balance(&user), 600);
@@ -104,4 +103,19 @@ fn test_panic_when_paused() {
     client.pause();
     let res = client.try_mint(&user, &1000);
     assert!(res.is_err());
+}
+#[test]
+fn test_update_name() {
+    let (e, _, _, client) = setup();
+    let new_name = String::from_str(&e, "New Name");
+    client.set_name(&new_name);
+    assert_eq!(client.name(), new_name);
+}
+
+#[test]
+fn test_update_symbol() {
+    let (e, _, _, client) = setup();
+    let new_symbol = String::from_str(&e, "NEW");
+    client.set_symbol(&new_symbol);
+    assert_eq!(client.symbol(), new_symbol);
 }

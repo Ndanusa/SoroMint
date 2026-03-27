@@ -58,3 +58,12 @@ pub fn emit_transfer_from(
     let topics = (Symbol::new(e, "tx_from"), spender.clone(), from.clone(), to.clone());
     e.events().publish(topics, (amount, remaining_allowance, new_from_balance, new_to_balance));
 }
+pub fn emit_name_updated(e: &Env, admin: &Address, old_name: &soroban_sdk::String, new_name: &soroban_sdk::String) {
+    let topics = (Symbol::new(e, "name_upd"), admin.clone());
+    e.events().publish(topics, (old_name.clone(), new_name.clone()));
+}
+
+pub fn emit_symbol_updated(e: &Env, admin: &Address, old_symbol: &soroban_sdk::String, new_symbol: &soroban_sdk::String) {
+    let topics = (Symbol::new(e, "symbol_upd"), admin.clone());
+    e.events().publish(topics, (old_symbol.clone(), new_symbol.clone()));
+}
