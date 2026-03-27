@@ -1,8 +1,7 @@
 #![cfg(test)]
 use super::*;
 use soroban_sdk::{
-    symbol_short, testutils::Address as _, testutils::Events, Address, Env, IntoVal, String, Val,
-    Vec,
+    testutils::Address as _, testutils::Events, Address, Env, IntoVal, String, Val,
 };
 
 // ---------------------------------------------------------------------------
@@ -14,7 +13,7 @@ fn setup() -> (Env, Address, Address, SoroMintTokenClient<'static>) {
 
     let admin = Address::generate(&e);
     let user = Address::generate(&e);
-    let token_id = e.register_contract(None, SoroMintToken);
+    let token_id = e.register(SoroMintToken, ());
     let client = SoroMintTokenClient::new(&e, &token_id);
 
     client.initialize(
@@ -53,7 +52,7 @@ fn test_initialize_emits_event() {
     let e = Env::default();
     e.mock_all_auths();
     let admin = Address::generate(&e);
-    let token_id = e.register_contract(None, SoroMintToken);
+    let token_id = e.register(SoroMintToken, ());
     let client = SoroMintTokenClient::new(&e, &token_id);
 
     client.initialize(
@@ -76,7 +75,7 @@ fn test_initialize_emits_event() {
 
 #[test]
 fn test_mint_and_burn() {
-    let (e, _, user, client) = setup();
+    let (_, _, user, client) = setup();
 
     client.mint(&user, &1000);
     assert_eq!(client.balance(&user), 1000);
@@ -177,7 +176,7 @@ fn test_burn_from() {
 #[test]
 #[should_panic(expected = "balance overflow")]
 fn test_balance_overflow() {
-    let (e, _, user, client) = setup();
+    let (_, _, user, client) = setup();
     client.mint(&user, &i128::MAX);
     client.mint(&user, &1);
 }
@@ -200,7 +199,7 @@ fn test_mint_negative() {
 
 #[test]
 fn test_transfer_ownership() {
-    let (e, admin, _, client) = setup();
+    let (e, _, _, client) = setup();
     let new_admin = Address::generate(&e);
 
     client.transfer_ownership(&new_admin);
